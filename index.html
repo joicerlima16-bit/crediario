@@ -166,6 +166,15 @@ nav.tabs .in-nav{max-width:560px;margin:0 auto;display:grid;grid-template-column
 .logo-big{width:72px;height:72px;border-radius:20px;background:var(--accent);color:#F6F1EA;display:grid;place-items:center;margin:0 auto 14px}
 .logo-big .ic{width:36px;height:36px}
 .link.block{display:block}
+.hist{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+.hist summary{font-size:14px;color:var(--accent);font-weight:600;padding:2px 0}
+.ev{display:flex;gap:10px;font-size:14px;padding:5px 0;border-bottom:1px solid #F1EBE3}
+.ev:last-child{border-bottom:0}
+.ev-d{color:var(--muted);flex:none;width:44px}
+.prev{white-space:pre-wrap;background:#E7F5EC;border-radius:14px 14px 14px 4px;padding:12px 14px;font-size:14.5px;line-height:1.45;border:1px solid #CFE8D8}
+.fila-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.prog{height:6px;background:#E8E0D6;border-radius:99px;overflow:hidden;margin:6px 0 12px}
+.prog i{display:block;height:100%;background:var(--wa)}
 </style>
 </head>
 <body>
@@ -241,7 +250,7 @@ const $ = id => document.getElementById(id);
 const plural = (n,a,b) => n===1?a:b;
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
-function fone(s){ let d=String(s||'').replace(/\D/g,''); if(!d) return ''; if(d.startsWith('0')) d=d.replace(/^0+/,''); if(!(d.startsWith('55') && d.length>=12)) d='55'+d; return d; }
+function fone(s){ let d=String(s||'').replace(/\D/g,''); if(!d) return ''; if(d.startsWith('0')) d=d.replace(/^0+/,''); if(!(d.startsWith('55') && d.length>=12)) d='55'+d; return (d.length>=12 && d.length<=13)?d:''; }
 function fmtFone(s){ const d=String(s||'').replace(/\D/g,'').replace(/^55(?=\d{10,11}$)/,''); if(d.length===11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`; if(d.length===10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`; return s||''; }
 
 /* ============ Estado ============ */
@@ -276,10 +285,10 @@ function calc(){
   for(const r of por.values()){
     r.notas.sort(ord); r.pags.sort(ord);
     const ps=[];
-    for(const n of r.notas) (n.parcelas||[]).forEach((p,i)=>ps.push({notaId:n.id,i,venc:p.venc||n.data||t,valor:num(p.valor),pago:0,notaData:n.data||''}));
+    for(const n of r.notas) (n.parcelas||[]).forEach((p,i)=>ps.push({notaId:n.id,i,venc:p.venc||n.data||t,valor:num(p.valor),pago:0,notaData:n.data||'',abates:[]}));
     ps.sort((a,b)=>a.venc.localeCompare(b.venc)||a.notaData.localeCompare(b.notaData)||a.i-b.i);
-    const take=(list,rem)=>{ for(const p of list){ if(rem<=0.004) break; const f=c2(p.valor-p.pago); if(f<=0.004) continue; const x=Math.min(f,rem); p.pago=c2(p.pago+x); rem=c2(rem-x);} return rem; };
-    for(const pg of r.pags){ let rem=num(pg.valor); if(pg.notaId) rem=take(ps.filter(p=>p.notaId===pg.notaId),rem); rem=take(ps,rem); r.credito=c2(r.credito+rem); }
+    const take=(list,rem,pg)=>{ for(const p of list){ if(rem<=0.004) break; const f=c2(p.valor-p.pago); if(f<=0.004) continue; const x=Math.min(f,rem); p.pago=c2(p.pago+x); rem=c2(rem-x); p.abates.push({pagId:pg.id,data:pg.data,valor:x,forma:pg.forma||''}); } return rem; };
+    for(const pg of r.pags){ let rem=num(pg.valor); if(pg.notaId) rem=take(ps.filter(p=>p.notaId===pg.notaId),rem,pg); rem=take(ps,rem,pg); pg.sobra=rem; r.credito=c2(r.credito+rem); }
     r.parcelas=ps;
     for(const p of ps){ p.falta=c2(p.valor-p.pago); if(p.falta>0.004){ r.saldo+=p.falta; if(p.venc<t){ r.vencido+=p.falta; if(!r.oldestVenc) r.oldestVenc=p.venc; } else if(!r.prox) r.prox=p; } }
     r.saldo=c2(r.saldo); r.vencido=c2(r.vencido); r.dias=r.oldestVenc?diffDias(t,r.oldestVenc):0;
@@ -407,6 +416,7 @@ function telaHoje(){
   const tot=arr.reduce((s,r)=>s+r.saldo,0), venc=arr.reduce((s,r)=>s+r.vencido,0), sem=semana.reduce((s,x)=>s+x.p.falta,0);
   h+=`<div class="stats"><div class="stat late"><div class="k">Em atraso</div><div class="v">${R(venc)}</div><div class="s">${atras.length} ${plural(atras.length,'cliente','clientes')}</div></div><div class="stat"><div class="k">A receber no total</div><div class="v">${R(tot)}</div><div class="s">${R(sem)} nos próximos 7 dias</div></div></div>`;
   h+=`<h2>Atrasadas</h2>`;
+  if(atras.length>1) h+=`<button class="btn wa block" style="margin-bottom:10px" data-act="fila">${I.wa} Cobrar todas em sequência (${atras.length})</button>`;
   if(!atras.length) h+=`<div class="card"><div class="empty" style="padding:10px"><b>Ninguém atrasado 🎉</b>Todas as parcelas vencidas estão pagas.</div></div>`;
   else h+=`<div class="list">${atras.map(r=>{
     const cob=r.c.ultimaCobranca?` · cobrada ${quando(r.c.ultimaCobranca)}`:'';
@@ -422,11 +432,11 @@ function quando(s){ const d=diffDias(hoje(),s); return d<=0?'hoje':d===1?'ontem'
 /* ---------- Clientes ---------- */
 function telaClientes(){
   const {por}=calc(); let arr=[...por.values()];
-  const counts={todas:arr.length,devendo:arr.filter(r=>r.saldo>0).length,atrasadas:arr.filter(r=>r.vencido>0).length,avista:arr.filter(r=>r.c.soAvista).length};
+  const counts={todas:arr.length,devendo:arr.filter(r=>r.saldo>0).length,atrasadas:arr.filter(r=>r.vencido>0).length,avista:arr.filter(r=>r.c.soAvista).length,semzap:arr.filter(r=>!fone(r.c.whatsapp)).length};
   let h=`<div class="top"><div class="grow"><h1>Clientes</h1></div><button class="btn sm sec" data-act="nova-cliente">${I.plus} Cliente</button></div>`;
   h+=`<div class="search">${I.search}<input id="busca" class="in" placeholder="Buscar pelo nome" value="${esc(S.busca)}" autocomplete="off"></div>`;
   const ch=(id,t)=>`<button class="chip ${S.filtro===id?'on':''}" data-act="filtro" data-id="${id}">${t} · ${counts[id]}</button>`;
-  h+=`<div class="chips mt">${ch('todas','Todas')}${ch('devendo','Devendo')}${ch('atrasadas','Atrasadas')}${ch('avista','Só à vista')}</div>`;
+  h+=`<div class="chips mt">${ch('todas','Todas')}${ch('devendo','Devendo')}${ch('atrasadas','Atrasadas')}${ch('avista','Só à vista')}${counts.semzap?ch('semzap','Sem WhatsApp'):''}</div>`;
   h+=`<div id="lista-cli" class="mt">${listaClientes()}</div>`;
   return h;
 }
@@ -435,6 +445,7 @@ function listaClientes(){
   if(S.filtro==='devendo') arr=arr.filter(r=>r.saldo>0);
   if(S.filtro==='atrasadas') arr=arr.filter(r=>r.vencido>0);
   if(S.filtro==='avista') arr=arr.filter(r=>r.c.soAvista);
+  if(S.filtro==='semzap') arr=arr.filter(r=>!fone(r.c.whatsapp));
   const q=norm(S.busca); if(q) arr=arr.filter(r=>norm(r.c.nome).includes(q));
   arr.sort((a,b)=>S.filtro==='atrasadas'?b.dias-a.dias:norm(a.c.nome).localeCompare(norm(b.c.nome)));
   if(!arr.length) return `<div class="card"><div class="empty">${q?'Nenhuma cliente com esse nome.':'Nenhuma cliente aqui.'}${q?`<div class="mt"><button class="btn sm sec" data-act="nova-cliente" data-nome="${esc(S.busca)}">${I.plus} Cadastrar “${esc(S.busca)}”</button></div>`:''}</div></div>`;
@@ -452,10 +463,11 @@ function listaClientes(){
 function telaCliente(id){
   const r=linha(id); const c=r.c; const t=hoje();
   let h=`<div class="top"><button class="back" data-act="voltar" aria-label="Voltar">${I.back}</button><div class="grow"><h1 style="font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.nome)}</h1><div class="sub">${c.whatsapp?esc(fmtFone(c.whatsapp)):'sem WhatsApp cadastrado'}${c.soAvista?' · <span class="tag warn">só à vista</span>':''}</div></div><button class="iconbtn" data-act="editar-cliente" data-id="${id}" aria-label="Editar">${I.edit}</button></div>`;
+  if(!fone(c.whatsapp)) h+=`<button class="banner warn" style="display:block;width:100%;text-align:left" data-act="editar-cliente" data-id="${id}">📱 <b>Sem WhatsApp cadastrado.</b> Toque aqui para adicionar e as mensagens abrirem direto na conversa dela.</button>`;
   if(c.obs) h+=`<div class="banner info">${esc(c.obs)}</div>`;
   h+=`<div class="saldo-box"><div class="stat ${r.vencido>0?'late':''}"><div class="k">${r.vencido>0?'Atrasado':'Atrasado'}</div><div class="v">${R(r.vencido)}</div><div class="s">${r.vencido>0?`há ${r.dias} ${plural(r.dias,'dia','dias')}`:'em dia'}</div></div><div class="stat"><div class="k">Saldo total</div><div class="v">${R(r.saldo)}</div><div class="s">${r.prox?'próxima '+fmtDc(r.prox.venc)+' · '+R(r.prox.falta):(r.saldo>0?'':'nada a pagar')}</div></div></div>`;
   if(r.credito>0) h+=`<div class="banner info">Pagou ${R(r.credito)} a mais. Esse crédito abate a próxima compra automaticamente.</div>`;
-  h+=`<div class="actions"><button class="btn" data-act="receber" data-id="${id}">${I.money} Receber</button><button class="btn wa" data-act="cobrar" data-id="${id}">${I.wa} Cobrar</button><button class="btn sec" data-act="nova-venda" data-id="${id}">${I.bag} Nova venda</button><button class="btn ghost" data-act="saldo-antigo" data-id="${id}">${I.note} Saldo antigo</button></div>`;
+  h+=`<div class="actions"><button class="btn" data-act="receber" data-id="${id}">${I.money} Receber</button><button class="btn wa" data-act="cobrar" data-id="${id}">${I.wa} Cobrar</button><button class="btn sec" data-act="nova-venda" data-id="${id}">${I.bag} Nova venda</button><button class="btn ghost" data-act="saldo-antigo" data-id="${id}">${I.note} Saldo antigo</button></div>${(r.notas.length||r.pags.length)?`<button class="btn ghost block mt" data-act="enviar-extrato" data-id="${id}">${I.list} Enviar extrato para a cliente</button>`:''}`;
   const abertas=r.notas.filter(n=>r.notaInfo[n.id].falta>0.004).reverse();
   const quitadas=r.notas.filter(n=>r.notaInfo[n.id].falta<=0.004).reverse();
   h+=`<h2>Notas em aberto (${abertas.length})</h2>`;
@@ -476,7 +488,7 @@ function notaCard(r,n,t){
     let st; if(p.falta<=0.004) st='<span class="tag ok">paga</span>'; else if(p.pago>0) st=`<span class="tag ${p.venc<t?'late':'warn'}">pagou ${R(p.pago)}</span>`; else if(p.venc<t) st='<span class="tag late">vencida</span>'; else st='<span class="tag mut">aberta</span>';
     return `<div class="p"><span>${inf.parcelas.length>1?(k+1)+'ª · ':''}${fmtD(p.venc)}</span><span style="display:flex;gap:8px;align-items:center">${st}<b>${R(p.valor)}</b></span></div>`;
   }).join('');
-  return `<div class="nota"><div class="nota-h"><div><b>${titulo}</b><div class="sub">${R(inf.total)}${inf.pago>0&&inf.falta>0.004?' · falta '+R(inf.falta):''}</div></div>${status}</div>${itens?`<div class="itens">${itens}</div>`:''}<div class="parc">${parc}</div>${n.obs?`<div class="hint">${esc(n.obs)}</div>`:''}<div class="nota-a"><button class="btn sm ghost" data-act="editar-nota" data-id="${n.id}">${I.edit} Editar</button><button class="btn sm ghost" data-act="apagar-nota" data-id="${n.id}" style="color:var(--late)">${I.trash} Excluir</button></div></div>`;
+  return `<div class="nota"><div class="nota-h"><div><b>${titulo}</b><div class="sub">${R(inf.total)}${inf.pago>0&&inf.falta>0.004?' · falta '+R(inf.falta):''}</div></div>${status}</div>${itens?`<div class="itens">${itens}</div>`:''}<div class="parc">${parc}</div>${n.obs?`<div class="hint">${esc(n.obs)}</div>`:''}<details class="hist"><summary>Histórico (${historicoNota(r,n).length}) ›</summary>${historicoNota(r,n).map(e=>`<div class="ev"><span class="ev-d">${fmtDc(e.data)}</span><span>${esc(e.txt)}</span></div>`).join('')}</details><div class="nota-a"><button class="btn sm sec" data-act="enviar-nota" data-id="${n.id}">${I.wa} Enviar</button><button class="btn sm ghost" data-act="editar-nota" data-id="${n.id}">${I.edit} Editar</button><button class="btn sm ghost" data-act="apagar-nota" data-id="${n.id}" style="color:var(--late)">${I.trash} Excluir</button></div></div>`;
 }
 
 /* ---------- Conferir ---------- */
@@ -518,7 +530,7 @@ function telaConferir(){
 function telaMais(){
   const c=cfg(); const mes=hoje().slice(0,7);
   let h=`<h1>Mais</h1>`;
-  h+=`<h2>Cobrança</h2><div class="card"><label class="lbl" style="margin-top:0">Chave Pix (aparece nas mensagens)</label><input id="cfg-pix" class="in" value="${esc(c.pix)}" placeholder="CPF, celular ou e-mail"><label class="lbl">Sugestão de parcelas: 1 mês a cada</label><input id="cfg-rpm" class="in" inputmode="decimal" value="${esc(brNum(c.reaisPorMes))}"><div class="hint">Ex.: com R$ 100, uma compra de R$ 250 sugere 3 parcelas. Você sempre pode mudar na hora.</div><button class="btn block mt" data-act="salvar-cfg">Salvar</button></div>`;
+  h+=`<h2>Cobrança</h2><div class="card"><label class="lbl" style="margin-top:0">Seu nome (aparece no topo das notinhas)</label><input id="cfg-nome" class="in" value="${esc(c.nomeLoja||'')}" placeholder="Ex.: Rose Cosméticos"><label class="lbl">Chave Pix (aparece nas mensagens)</label><input id="cfg-pix" class="in" value="${esc(c.pix)}" placeholder="CPF, celular ou e-mail"><label class="lbl">Sugestão de parcelas: 1 mês a cada</label><input id="cfg-rpm" class="in" inputmode="decimal" value="${esc(brNum(c.reaisPorMes))}"><div class="hint">Ex.: com R$ 100, uma compra de R$ 250 sugere 3 parcelas. Você sempre pode mudar na hora.</div><label class="lbl">Como abrir o WhatsApp</label><div class="seg"><button class="${c.modoWa!=='link'?'on':''}" data-act="modo-wa" data-id="app">Direto no app</button><button class="${c.modoWa==='link'?'on':''}" data-act="modo-wa" data-id="link">Pelo link</button></div><div class="hint">Use "Pelo link" só se o direto não abrir a conversa (por exemplo, se ela usa o WhatsApp Business e abrir o app errado).</div><button class="btn block mt" data-act="salvar-cfg">Salvar</button></div>`;
   h+=`<h2>Bancos</h2><div class="card"><div>${c.bancos.map((b,i)=>`<span class="bank-chip">${esc(b)}<button data-act="rm-banco" data-id="${i}" aria-label="Remover">×</button></span>`).join('')}</div><div style="display:flex;gap:8px"><input id="cfg-banco" class="in" placeholder="Adicionar banco"><button class="btn sec" data-act="add-banco">Adicionar</button></div></div>`;
   h+=`<h2>Mensagens do WhatsApp</h2><div class="card"><div class="hint" style="margin:0 0 4px">Use {nome}, {valor}, {vencimento}, {dias}, {saldo} e {pix}. O app troca pelos dados da cliente.</div>
   <label class="lbl">Lembrete (antes de vencer)</label><textarea id="tpl-lembrete" class="in">${esc(c.tpl.lembrete)}</textarea>
@@ -613,7 +625,9 @@ async function salvarVenda(){
     const s=c2(parcelas.reduce((a,p)=>a+p.valor,0)); if(Math.abs(s-tot)>=0.01) return toast('A soma das parcelas não bate com o total.');
     if(parcelas.some(p=>!p.venc)) return toast('Falta a data de alguma parcela.');
   }
-  const nota={clienteId:CTX.clienteId,data:CTX.data||hoje(),itens,total:tot,parcelas,tipo:CTX.modo==='saldo'?'saldo':'venda',obs:CTX.obs.trim(),criadoEm:CTX.criadoEm||Date.now(),atualizadoEm:Date.now()};
+  const antiga=CTX.notaId?S.notas.get(CTX.notaId):null; const historico=antiga?[...(antiga.historico||[])]:[];
+  if(antiga){ const mud=[]; if(Math.abs(num(antiga.total)-tot)>=0.01) mud.push(`total ${R(antiga.total)} → ${R(tot)}`); const np=(antiga.parcelas||[]).length; if(np!==parcelas.length) mud.push(`parcelas ${np}x → ${parcelas.length}x`); else if(JSON.stringify((antiga.parcelas||[]).map(p=>[p.venc,num(p.valor)]))!==JSON.stringify(parcelas.map(p=>[p.venc,p.valor]))) mud.push('datas/valores das parcelas mudaram'); if(JSON.stringify((antiga.itens||[]).map(i=>[i.desc,num(i.qtd),num(i.valor)]))!==JSON.stringify(itens.map(i=>[i.desc,i.qtd,i.valor]))) mud.push('produtos alterados'); if(mud.length) historico.push({em:hoje(),txt:'Notinha editada: '+mud.join('; ')}); }
+  const nota={clienteId:CTX.clienteId,data:CTX.data||hoje(),itens,total:tot,parcelas,tipo:CTX.modo==='saldo'?'saldo':'venda',obs:CTX.obs.trim(),historico,parcOriginal:antiga?(antiga.parcOriginal||(antiga.parcelas||[]).length):parcelas.length,totalOriginal:antiga?(antiga.totalOriginal??num(antiga.total)):tot,criadoEm:CTX.criadoEm||Date.now(),atualizadoEm:Date.now()};
   const btn=document.querySelector('[data-act="salvar-venda"]'); if(btn) btn.disabled=true;
   try{
     const id=await D.salvarNota(CTX.clienteId,CTX.notaId||null,nota);
@@ -622,8 +636,9 @@ async function salvarVenda(){
       await D.salvarPag(CTX.clienteId,null,{notaId:id,data:nota.data,valor:tot,forma:CTX.forma,banco,obs:'à vista',conferido:false,criadoEm:Date.now()});
     }
     const cid=CTX.clienteId, editando=!!CTX.notaId; fecharSheet();
-    toast(editando?'Nota atualizada.':(nota.tipo==='saldo'?'Saldo lançado.':'Venda salva.'));
     abrirFicha(cid);
+    if(editando) toast('Nota atualizada.');
+    else abrirEnvioNota(id, nota.tipo==='saldo'?'Saldo lançado! Mandar para a cliente?':'Venda salva! Mandar a notinha para a cliente?');
   }catch(e){ if(btn) btn.disabled=false; falhou(e); }
 }
 
@@ -679,7 +694,7 @@ function abrirCobrar(id){
   CTX={kind:'cobrar', clienteId:id, tom:tomAuto(r), fone:r.c.whatsapp||''}; CTX.msg=montarMsg(r,CTX.tom);
   abrirSheet('Cobrar '+(r.c.nome||'').split(' ')[0]); renderCobrar();
 }
-function waLink(){ const f=fone(CTX.fone); return f?`https://wa.me/${f}?text=${encodeURIComponent(CTX.msg)}`:`https://wa.me/?text=${encodeURIComponent(CTX.msg)}`; }
+function waLink(){ return waPara(CTX.fone,CTX.msg); }
 function renderCobrar(){
   const r=linha(CTX.clienteId);
   let h=`<div class="sub">${r.vencido>0?`${R(r.vencido)} atrasado há ${r.dias} ${plural(r.dias,'dia','dias')} · saldo ${R(r.saldo)}`:(r.saldo>0?`Em dia · saldo ${R(r.saldo)}`:'Sem débitos')}</div>`;
@@ -687,12 +702,16 @@ function renderCobrar(){
   h+=`<label class="lbl">Mensagem (pode editar)</label><textarea id="c-msg" class="in" style="min-height:170px">${esc(CTX.msg)}</textarea>`;
   if(!r.c.whatsapp) h+=`<label class="lbl">WhatsApp da cliente</label><input id="c-fone" class="in" inputmode="tel" placeholder="(27) 99999-9999" value="${esc(CTX.fone)}"><div class="hint">Vai ficar salvo na ficha dela.</div>`;
   $('sheet-b').innerHTML=h;
-  $('sheet-f').innerHTML=`<button class="btn ghost" data-act="copiar-msg" style="flex:0 0 auto">${I.copy} Copiar</button><a id="wa-go" class="btn wa" href="${waLink()}" target="_blank" rel="noopener">${I.wa} Abrir no WhatsApp</a>`;
+  $('sheet-f').innerHTML=`<button class="btn ghost" data-act="copiar-msg" style="flex:0 0 auto">${I.copy} Copiar</button><a id="wa-go" class="btn wa" href="${waLink()}"${alvoWa()}>${I.wa} <span id="wa-rot">${rotuloWa(CTX.fone,'Abrir conversa no WhatsApp')}</span></a>`;
 }
 async function registrarCobranca(){
   if(!CTX||CTX.kind!=='cobrar'||!STORE) return;
-  const id=CTX.clienteId; const c=S.clientes.get(id); if(!c) return;
-  const upd={ultimaCobranca:hoje()}; if(!c.whatsapp && CTX.fone.replace(/\D/g,'').length>=10) upd.whatsapp=CTX.fone.trim();
+  return registrarContato(CTX.clienteId, CTX.fone, true);
+}
+async function registrarContato(id, fon, cobranca){
+  const c=S.clientes.get(id); if(!c||!STORE) return;
+  const upd={}; if(cobranca) upd.ultimaCobranca=hoje(); if(!c.whatsapp && String(fon||'').replace(/\D/g,'').length>=10) upd.whatsapp=String(fon).trim();
+  if(!Object.keys(upd).length) return;
   try{ await mutar(id,c=>({...c,...upd})); }catch(e){ console.warn(e); }
 }
 
@@ -732,6 +751,171 @@ function confirmar(titulo,texto,ok){
   });
 }
 
+
+/* ============ Histórico, notinha, extrato e envio ============ */
+function historicoNota(r,n){
+  const inf=r.notaInfo[n.id]; if(!inf) return [];
+  const ev=[]; let ord=0;
+  ev.push({data:n.data, o:ord++, txt: n.tipo==='saldo' ? `Saldo de notinha antiga lançado: ${R(n.totalOriginal??inf.total)} em ${n.parcOriginal||inf.parcelas.length}x` : `Compra registrada: ${R(n.totalOriginal??inf.total)} em ${n.parcOriginal||inf.parcelas.length}x`});
+  for(const h of (n.historico||[])) ev.push({data:h.em, o:ord++, txt:h.txt});
+  const porPag=new Map();
+  inf.parcelas.forEach((p,k)=>{ for(const a of p.abates){ const g=porPag.get(a.pagId)||{data:a.data,total:0,parc:[]}; g.total=c2(g.total+a.valor); g.parc.push(k+1); porPag.set(a.pagId,g); } });
+  for(const [pid,g] of porPag){ const pg=S.pags.get(pid); const val=pg?num(pg.valor):g.total; const forma=pg&&pg.forma?` (${pg.forma})`:'';
+    const qual=inf.parcelas.length>1?` · ${[...new Set(g.parc)].map(x=>x+'ª').join(', ')} parcela`:'';
+    ev.push({data:g.data, o:ord++, txt: Math.abs(val-g.total)<0.01 ? `Pagamento de ${R(val)}${forma} abatido${qual}` : `Pagamento de ${R(val)}${forma}: ${R(g.total)} abatido aqui${qual}`}); }
+  inf.parcelas.forEach((p,k)=>{ if(p.falta<=0.004 && p.abates.length){ const d=p.abates[p.abates.length-1].data; ev.push({data:d,o:1e6+k,txt: inf.parcelas.length>1?`${k+1}ª parcela quitada`:'Parcela quitada'}); } });
+  if(inf.falta<=0.004 && inf.parcelas.some(p=>p.abates.length)){ const d=inf.parcelas.flatMap(p=>p.abates).map(a=>a.data).sort().pop(); ev.push({data:d,o:2e6,txt:'Notinha quitada ✓'}); }
+  return ev.sort((a,b)=>(a.data||'').localeCompare(b.data||'')||a.o-b.o);
+}
+const primeiroNome = c => ((c&&c.nome)||'').trim().split(/\s+/)[0]||'';
+function statusParc(p,t){ if(p.falta<=0.004) return ['✅','paga']; if(p.pago>0) return [p.venc<t?'🔴':'🟡',`pagou ${R(p.pago)}, falta ${R(p.falta)}`]; if(p.venc<t) return ['🔴','vencida']; return ['⏳','a vencer']; }
+function textoNota(id){
+  const n=S.notas.get(id); if(!n) return ''; const r=linha(n.clienteId); const inf=r.notaInfo[id]; const c=cfg(); const t=hoje();
+  const L=[];
+  L.push(`*${c.nomeLoja||'Notinha'}*`);
+  L.push(`Oi, ${primeiroNome(r.c)}! ${n.tipo==='saldo'?'Segue o que ficou em aberto da sua notinha:':`Segue sua compra de ${fmtD(n.data)}:`}`);
+  L.push('');
+  for(const it of (n.itens||[])) L.push(`• ${num(it.qtd)||1}x ${it.desc||'item'}: ${R((num(it.qtd)||1)*num(it.valor))}`);
+  L.push(`*Total: ${R(inf.total)}*`);
+  L.push('');
+  if(inf.parcelas.length===1 && inf.parcelas[0].falta<=0.004 && inf.parcelas[0].venc===n.data) L.push('Pago à vista ✅');
+  else { L.push(inf.parcelas.length>1?'*Parcelas*':'*Vencimento*'); inf.parcelas.forEach((p,k)=>{ const [e,s]=statusParc(p,t); L.push(`${inf.parcelas.length>1?(k+1)+'ª ':''}${fmtD(p.venc)}: ${R(p.valor)}${(p.pago>0||p.venc<t)?` ${e} ${s}`:''}`); }); }
+  if(inf.pago>0 && inf.falta>0.004) L.push('', `Já pago: ${R(inf.pago)} · *Falta: ${R(inf.falta)}*`);
+  if(c.pix && inf.falta>0.004) L.push('', `Pix: ${c.pix}`);
+  L.push('', 'Obrigada pela preferência! 💛');
+  return L.join('\n');
+}
+function textoExtrato(cid){
+  const r=linha(cid); const c=cfg(); const t=hoje();
+  const abertas=r.notas.filter(n=>r.notaInfo[n.id].falta>0.004);
+  const L=[];
+  L.push(`*Extrato${c.nomeLoja?' · '+c.nomeLoja:''}*`);
+  L.push(`Oi, ${primeiroNome(r.c)}! Aqui está o resumo das suas notinhas, atualizado em ${fmtD(t)}:`);
+  if(!abertas.length){ L.push('', 'Você não tem nada em aberto. Tudo pago! ✅'); }
+  for(const n of abertas){ const inf=r.notaInfo[n.id];
+    L.push('', `🛍️ *${n.tipo==='saldo'?'Notinha anterior':'Compra de '+fmtD(n.data)}*: ${R(inf.total)}`);
+    const itens=(n.itens||[]).map(i=>`${num(i.qtd)||1}x ${i.desc}`).filter(x=>x.trim()).join(', '); if(itens && n.tipo!=='saldo') L.push(`   ${itens}`);
+    inf.parcelas.forEach((p,k)=>{ const [e,s]=statusParc(p,t); L.push(`   ${inf.parcelas.length>1?(k+1)+'ª ':''}${fmtDc(p.venc)}: ${R(p.valor)} ${e} ${s}`); });
+  }
+  const desde=abertas.length?abertas[0].data:addDias(t,-60);
+  const pags=r.pags.filter(p=>p.data>=desde);
+  if(pags.length){ L.push('', '💰 *Pagamentos recebidos*'); for(const p of pags) L.push(`   ${fmtDc(p.data)}: ${R(p.valor)}${p.forma?' ('+p.forma+')':''}`); }
+  if(abertas.length){
+    const tot=abertas.reduce((s,n)=>s+r.notaInfo[n.id].total,0), pago=abertas.reduce((s,n)=>s+r.notaInfo[n.id].pago,0);
+    L.push('', `Total das notinhas em aberto: ${R(tot)}`, `Já pago delas: ${R(pago)}`, `*Falta pagar: ${R(r.saldo)}*`);
+    if(r.vencido>0) L.push(`Desse valor, ${R(r.vencido)} já venceu.`);
+    else if(r.prox) L.push(`Próximo vencimento: ${fmtD(r.prox.venc)} (${R(r.prox.falta)})`);
+  }
+  if(r.credito>0) L.push(`Você tem ${R(r.credito)} de crédito para a próxima compra.`);
+  if(c.pix && r.saldo>0) L.push('', `Pix: ${c.pix}`);
+  L.push('', 'Qualquer dúvida é só me chamar 😊');
+  return L.join('\n');
+}
+/* imagem da notinha/extrato (para mandar como foto) */
+function blocosNota(id){
+  const n=S.notas.get(id); const r=linha(n.clienteId); const inf=r.notaInfo[id]; const t=hoje(); const B=[];
+  B.push({t:'sub',txt:`Cliente: ${r.c.nome}`},{t:'sub',txt:n.tipo==='saldo'?'Notinha anterior':'Compra de '+fmtD(n.data)},{t:'sep'});
+  for(const it of (n.itens||[])) B.push({t:'row',l:`${num(it.qtd)||1}× ${it.desc||'item'}`,r:R((num(it.qtd)||1)*num(it.valor))});
+  B.push({t:'total',l:'Total',r:R(inf.total)},{t:'h',txt:inf.parcelas.length>1?'Parcelas':'Vencimento'});
+  inf.parcelas.forEach((p,k)=>{ const [,s]=statusParc(p,t); B.push({t:'row',l:`${inf.parcelas.length>1?(k+1)+'ª · ':''}${fmtD(p.venc)}`,r:R(p.valor),tag:(p.pago>0||p.venc<t)?s:'',cor:p.falta<=0.004?'ok':(p.venc<t?'late':'')}); });
+  if(inf.pago>0 && inf.falta>0.004) B.push({t:'sep'},{t:'row',l:'Já pago',r:R(inf.pago)},{t:'total',l:'Falta',r:R(inf.falta),cor:'late'});
+  return {titulo:n.tipo==='saldo'?'Saldo da notinha':'Notinha', B};
+}
+function blocosExtrato(cid){
+  const r=linha(cid); const t=hoje(); const B=[]; const abertas=r.notas.filter(n=>r.notaInfo[n.id].falta>0.004);
+  B.push({t:'sub',txt:`Cliente: ${r.c.nome}`},{t:'sub',txt:`Atualizado em ${fmtD(t)}`});
+  if(!abertas.length) B.push({t:'sep'},{t:'row',l:'Nada em aberto. Tudo pago!',r:'✓',cor:'ok'});
+  for(const n of abertas){ const inf=r.notaInfo[n.id]; B.push({t:'h',txt:`${n.tipo==='saldo'?'Notinha anterior':'Compra de '+fmtD(n.data)} · ${R(inf.total)}`});
+    inf.parcelas.forEach((p,k)=>{ const [,s]=statusParc(p,t); B.push({t:'row',l:`${inf.parcelas.length>1?(k+1)+'ª · ':''}${fmtD(p.venc)}`,r:R(p.valor),tag:s,cor:p.falta<=0.004?'ok':(p.venc<t?'late':'')}); }); }
+  const desde=abertas.length?abertas[0].data:addDias(t,-60); const pags=r.pags.filter(p=>p.data>=desde);
+  if(pags.length){ B.push({t:'h',txt:'Pagamentos recebidos'}); for(const p of pags) B.push({t:'row',l:`${fmtD(p.data)}${p.forma?' · '+p.forma:''}`,r:R(p.valor),cor:'ok'}); }
+  if(abertas.length){ B.push({t:'sep'}); if(r.vencido>0) B.push({t:'row',l:'Vencido',r:R(r.vencido),cor:'late'}); B.push({t:'total',l:'Falta pagar',r:R(r.saldo),cor:r.vencido>0?'late':''}); }
+  return {titulo:'Extrato', B};
+}
+async function gerarImagem({titulo,B}){
+  try{ await document.fonts.ready; }catch(e){}
+  const c=cfg(); const W=1080, P=72; const SANS='Inter, -apple-system, Helvetica, Arial, sans-serif', SERIF='Fraunces, Georgia, serif';
+  const alt={h:96,row:62,sub:46,sep:34,total:84}; const H=250+B.reduce((s,b)=>s+alt[b.t],0)+(c.pix?150:90);
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  const COR={ink:'#2B2420',mut:'#857A70',late:'#B24E26',ok:'#2F7A52',acc:'#2F5D50',line:'#E8DFD4'};
+  x.fillStyle='#FBF8F4'; x.fillRect(0,0,W,H);
+  x.fillStyle=COR.acc; x.fillRect(0,0,W,200);
+  x.fillStyle='#F6F1EA'; x.font=`600 58px ${SERIF}`; x.textBaseline='alphabetic'; x.fillText(titulo,P,112);
+  x.font=`500 32px ${SANS}`; x.fillStyle='#CFE2DA'; x.fillText(c.nomeLoja||'Crediário',P,162);
+  const corta=(txt,max,font)=>{ x.font=font; if(x.measureText(txt).width<=max) return txt; while(txt.length>1 && x.measureText(txt+'…').width>max) txt=txt.slice(0,-1); return txt+'…'; };
+  let y=250;
+  for(const b of B){
+    if(b.t==='sub'){ x.font=`500 30px ${SANS}`; x.fillStyle=COR.mut; x.fillText(corta(b.txt,W-2*P,x.font),P,y+30); }
+    else if(b.t==='sep'){ x.strokeStyle=COR.line; x.lineWidth=2; x.setLineDash([10,8]); x.beginPath(); x.moveTo(P,y+17); x.lineTo(W-P,y+17); x.stroke(); x.setLineDash([]); }
+    else if(b.t==='h'){ x.font=`700 26px ${SANS}`; x.fillStyle=COR.acc; x.fillText(corta(b.txt.toUpperCase(),W-2*P,x.font),P,y+70); }
+    else if(b.t==='row'||b.t==='total'){
+      const big=b.t==='total'; const fr=big?`700 40px ${SERIF}`:`600 32px ${SANS}`; const fl=big?`600 34px ${SANS}`:`400 32px ${SANS}`; const base=y+(big?56:42);
+      x.font=fr; x.fillStyle=b.cor?COR[b.cor]:COR.ink; const wr=x.measureText(b.r).width; x.textAlign='right'; x.fillText(b.r,W-P,base); x.textAlign='left';
+      let wTag=0; if(b.tag){ x.font=`600 24px ${SANS}`; wTag=x.measureText(b.tag).width+28; }
+      x.font=fl; x.fillStyle=big?COR.ink:'#4A403A'; const lt=corta(b.l,W-2*P-wr-wTag-40,fl); x.fillText(lt,P,base);
+      if(b.tag){ const lw=x.measureText(lt).width; const tx=P+lw+18; x.font=`600 24px ${SANS}`; const bg=b.cor==='ok'?'#DFF0E6':b.cor==='late'?'#F8E5DA':'#F7EDD2'; x.fillStyle=bg; const tw=wTag-10; x.beginPath(); (x.roundRect?x.roundRect(tx,base-30,tw,40,20):x.rect(tx,base-30,tw,40)); x.fill(); x.fillStyle=b.cor?COR[b.cor]:'#9A6B00'; x.fillText(b.tag,tx+14,base-2); }
+    }
+    y+=alt[b.t];
+  }
+  y+=30; x.font=`500 28px ${SANS}`; x.fillStyle=COR.mut;
+  if(c.pix){ x.fillStyle=COR.ink; x.font=`600 30px ${SANS}`; x.fillText(corta('Pix: '+c.pix,W-2*P,x.font),P,y+30); y+=60; x.font=`500 26px ${SANS}`; x.fillStyle=COR.mut; }
+  x.fillText('Gerado em '+fmtD(hoje()),P,y+30);
+  return await new Promise(res=>cv.toBlob(res,'image/png'));
+}
+async function compartilharImagem(blob,nome){
+  if(!blob) return toast('Não deu para gerar a imagem.');
+  const f=new File([blob],nome,{type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f]}); return; }catch(e){ if(e&&e.name==='AbortError') return; } }
+  const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),8000); toast('Imagem salva. Agora é só anexar no WhatsApp.');
+}
+const CELULAR=/iphone|ipad|ipod|android/i.test(navigator.userAgent);
+const waDireto=()=>CELULAR && cfg().modoWa!=='link';
+function waPara(fon,msg){ const f=fone(fon), t=encodeURIComponent(msg);
+  if(waDireto()) return f?`whatsapp://send?phone=${f}&text=${t}`:`whatsapp://send?text=${t}`;
+  return f?`https://wa.me/${f}?text=${t}`:`https://wa.me/?text=${t}`; }
+const alvoWa=()=>waDireto()?'':' target="_blank" rel="noopener"';
+const rotuloWa=(fon,txt)=>fone(fon)?txt:'Escolher contato no WhatsApp';
+/* folha de envio (notinha ou extrato) */
+function abrirEnvio({titulo, aviso, clienteId, texto, imagem, nomeArq}){
+  const c=S.clientes.get(clienteId); if(!c) return;
+  CTX={kind:'envio', clienteId, msg:texto, fone:c.whatsapp||'', nomeArq, blob:null, imagem};
+  imagem().then(b=>{ if(CTX&&CTX.kind==='envio') CTX.blob=b; }).catch(e=>console.warn(e));
+  abrirSheet(titulo);
+  let h=aviso?`<div class="banner info" style="margin-top:0">${aviso}</div>`:'';
+  h+=`<label class="lbl">Mensagem para ${esc(primeiroNome(c))} (pode editar)</label><textarea id="e-msg" class="in" style="min-height:240px;font-size:15px">${esc(texto)}</textarea>`;
+  if(!c.whatsapp) h+=`<label class="lbl">WhatsApp da cliente</label><input id="e-fone" class="in" inputmode="tel" placeholder="(27) 99999-9999"><div class="hint">Fica salvo na ficha dela.</div>`;
+  h+=`<div class="two mt"><button class="btn ghost" data-act="e-img">${I.note} Mandar como imagem</button><button class="btn ghost" data-act="e-copiar">${I.copy} Copiar texto</button></div><div class="hint">Em texto, o WhatsApp já abre na conversa dela. A imagem vai pelo compartilhar do celular.</div>`;
+  $('sheet-b').innerHTML=h;
+  $('sheet-f').innerHTML=`<button class="btn ghost" data-act="fechar" style="flex:0 0 auto">Agora não</button><a id="e-wa" class="btn wa" href="${waPara(CTX.fone,CTX.msg)}"${alvoWa()}>${I.wa} <span id="wa-rot">${rotuloWa(CTX.fone,'Abrir conversa no WhatsApp')}</span></a>`;
+}
+function abrirEnvioNota(id, aviso){ const n=S.notas.get(id); if(!n) return; abrirEnvio({titulo:'Enviar notinha', aviso, clienteId:n.clienteId, texto:textoNota(id), imagem:()=>gerarImagem(blocosNota(id)), nomeArq:`notinha-${primeiroNome(S.clientes.get(n.clienteId)).toLowerCase()||'cliente'}-${n.data}.png`}); }
+function abrirEnvioExtrato(cid){ abrirEnvio({titulo:'Enviar extrato', clienteId:cid, texto:textoExtrato(cid), imagem:()=>gerarImagem(blocosExtrato(cid)), nomeArq:`extrato-${primeiroNome(S.clientes.get(cid)).toLowerCase()||'cliente'}-${hoje()}.png`}); }
+/* cobrança em sequência */
+function abrirFila(){
+  const {por}=calc(); const t=hoje();
+  let lista=[...por.values()].filter(r=>r.vencido>0).sort((a,b)=>b.dias-a.dias||b.vencido-a.vencido);
+  const pend=lista.filter(r=>r.c.ultimaCobranca!==t); const jaHoje=lista.length-pend.length; if(pend.length) lista=pend;
+  if(!lista.length) return toast('Ninguém atrasado agora.');
+  CTX={kind:'fila', ids:lista.map(r=>r.id), i:0, feitas:0, jaHoje, esperando:false};
+  abrirSheet('Cobrar em sequência'); renderFila();
+}
+function renderFila(){
+  const F=CTX; const tot=F.ids.length;
+  if(F.i>=tot){ $('sheet-b').innerHTML=`<div class="empty" style="padding:30px 10px"><b>Pronto! 🎉</b>${F.feitas} ${plural(F.feitas,'cliente cobrada','clientes cobradas')} agora.</div>`; $('sheet-f').innerHTML=`<button class="btn" data-act="fechar">Fechar</button>`; return; }
+  const r=linha(F.ids[F.i]); if(!r){ F.i++; return renderFila(); }
+  F.tom=F.tom&&F.tomCliente===r.id?F.tom:tomAuto(r); F.tomCliente=r.id; F.msg=montarMsg(r,F.tom); F.fone=r.c.whatsapp||'';
+  let h=`<div class="fila-top"><span class="sub">${F.i+1} de ${tot}${F.jaHoje?` · ${F.jaHoje} já ${plural(F.jaHoje,'cobrada','cobradas')} hoje ficaram de fora`:''}</span></div><div class="prog"><i style="width:${Math.round(F.i/tot*100)}%"></i></div>`;
+  h+=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-size:19px">${esc(r.c.nome)}</b><b style="color:var(--late);white-space:nowrap">${R(r.vencido)}</b></div><div class="sub">atrasado há ${r.dias} ${plural(r.dias,'dia','dias')} · saldo ${R(r.saldo)}${r.c.ultimaCobranca?' · cobrada '+quando(r.c.ultimaCobranca):''}</div>`;
+  h+=`<div class="seg mt" style="grid-template-columns:1fr 1fr 1fr">${[['lembrete','Lembrete'],['atrasada','Atrasada'],['firme','Firme']].map(([k,t])=>`<button class="${F.tom===k?'on':''}" data-act="f-tom" data-id="${k}">${t}</button>`).join('')}</div>`;
+  h+=`<label class="lbl">Mensagem</label><textarea id="f-msg" class="in" style="min-height:150px">${esc(F.msg)}</textarea>`;
+  h+=`<button class="link mt" data-act="f-extrato">+ Juntar o extrato completo na mensagem</button>`;
+  if(!r.c.whatsapp) h+=`<label class="lbl">WhatsApp da cliente</label><input id="f-fone" class="in" inputmode="tel" placeholder="(27) 99999-9999">`;
+  h+=`<div class="hint mt">Depois de enviar, volte para o app: ele já mostra a próxima.</div>`;
+  $('sheet-b').innerHTML=h;
+  $('sheet-f').innerHTML=`<button class="btn ghost" data-act="f-pular" style="flex:0 0 auto">Pular</button><a id="f-wa" class="btn wa" href="${waPara(F.fone,F.msg)}"${alvoWa()}>${I.wa} <span id="wa-rot">${rotuloWa(F.fone,'Abrir conversa e ir para a próxima')}</span></a>`;
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && CTX && CTX.kind==='fila' && CTX.esperando){ CTX.esperando=false; CTX.i++; CTX.feitas++; CTX.tom=null; renderFila(); } });
+
 /* ============ Navegação ============ */
 function irPara(v){ S.view=v; if(v!=='cliente') S.clienteAtual=null; if(['hoje','clientes','conferir','mais'].includes(v) && location.hash!=='#'+v){ try{ history.replaceState(null,'','#'+v); }catch(e){ location.hash=v; } } render(); window.scrollTo(0,0); }
 function abrirFicha(id){ S.view='cliente'; S.clienteAtual=id; render(); window.scrollTo(0,0); }
@@ -751,6 +935,16 @@ document.addEventListener('click', async e=>{
     case 'esqueci': { const em=$('lg-email').value.trim(); const er=$('lg-erro'); if(!em){ er.textContent='Digite seu e-mail primeiro.'; er.classList.remove('hidden'); return; } try{ await STORE.recuperar(em); toast('Enviamos um e-mail para você criar uma senha nova.'); }catch(x){ er.textContent=msgLogin(x); er.classList.remove('hidden'); } return; }
     case 'sair': { if(S.tela==='app' && !S.erro){ const ok=await confirmar('Sair da conta?','Para entrar de novo vai precisar do e-mail e da senha.','Sair'); if(!ok) return; } await STORE.sair(); S.view='hoje'; return; }
     case 'fechar-dica': lsSet('dicaInstalar','ok'); return render();
+    case 'enviar-nota': return abrirEnvioNota(id);
+    case 'enviar-extrato': return abrirEnvioExtrato(id);
+    case 'e-img': { const b=CTX.blob||await CTX.imagem(); return compartilharImagem(b,CTX.nomeArq); }
+    case 'e-copiar': { const ok=await copiar(CTX.msg); if(!ok){ const t=$('e-msg'); t.focus(); t.select(); toast('Selecionei o texto. Toque em Copiar.'); } return; }
+    case 'fila': return abrirFila();
+    case 'modo-wa': { if(bloqueado()) return; try{ await D.salvarConfig({...(S.config||{}), bancos:cfg().bancos, modoWa:id}); toast(id==='link'?'Vai abrir pelo link.':'Vai abrir direto no app.'); }catch(err){ falhou(err); } return; }
+    case 'pk-criar': { const nome=CTX.pkq.trim(); if(!nome) return; const fo=($('pk-fone')||{}).value||''; try{ const nid=await D.salvarCliente(null,{nome,whatsapp:fo.trim(),obs:'',soAvista:false}); CTX.clienteId=nid; CTX.nomeTmp=nome; invalidate(); (CTX.kind==='venda'?renderVenda:renderReceber)(); toast('Cliente cadastrada.'); }catch(err){ falhou(err); } return; }
+    case 'f-tom': CTX.tom=id; { const r=linha(CTX.ids[CTX.i]); CTX.msg=montarMsg(r,id); $('f-msg').value=CTX.msg; const a=$('f-wa'); if(a) a.href=waPara(CTX.fone,CTX.msg); document.querySelectorAll('[data-act="f-tom"]').forEach(b=>b.classList.toggle('on',b.dataset.id===id)); } return;
+    case 'f-extrato': { CTX.msg=CTX.msg+'\n\n'+textoExtrato(CTX.ids[CTX.i]); $('f-msg').value=CTX.msg; const a=$('f-wa'); if(a) a.href=waPara(CTX.fone,CTX.msg); el.remove(); return; }
+    case 'f-pular': CTX.i++; CTX.tom=null; return renderFila();
     case 'novo-menu': if(bloqueado()) return; return abrirMenuNovo();
     case 'm-receber': fecharSheet(); return abrirReceber({});
     case 'm-venda': fecharSheet(); return abrirVenda({});
@@ -777,7 +971,7 @@ document.addEventListener('click', async e=>{
     /* seletor */
     case 'pk-trocar': CTX.clienteId=null; CTX.pkq=''; return CTX.kind==='venda'?renderVenda():renderReceber();
     case 'pk-sel': CTX.clienteId=id; return CTX.kind==='venda'?renderVenda():renderReceber();
-    case 'pk-novo': { const nome=CTX.pkq.trim(); if(!nome) return; try{ const nid=await D.salvarCliente(null,{nome,whatsapp:'',obs:'',soAvista:false}); CTX.clienteId=nid; CTX.nomeTmp=nome; invalidate(); (CTX.kind==='venda'?renderVenda:renderReceber)(); toast('Cliente cadastrada. Dá para pôr o WhatsApp depois na ficha.'); }catch(err){ falhou(err); } return; }
+    case 'pk-novo': { const nome=CTX.pkq.trim(); if(!nome) return; $('pk-res').innerHTML=`<div class="card mt"><b>Nova cliente: ${esc(nome)}</b><label class="lbl">WhatsApp dela</label><input id="pk-fone" class="in" inputmode="tel" placeholder="(27) 99999-9999"><div class="hint">Com o número, as mensagens já abrem na conversa dela.</div><button class="btn block mt" data-act="pk-criar">Cadastrar e continuar</button></div>`; setTimeout(()=>{ const f=$('pk-fone'); if(f) f.focus(); },50); return; }
     /* venda */
     case 'add-item': CTX.itens.push({qtd:'1',desc:'',valor:''}); $('v-itens').innerHTML=itensHTML(); { const ins=$('v-itens').querySelectorAll('[data-it="desc"]'); ins[ins.length-1].focus(); } return;
     case 'rm-item': CTX.itens.splice(+id,1); $('v-itens').innerHTML=itensHTML(); return vendaMudou();
@@ -798,7 +992,7 @@ document.addEventListener('click', async e=>{
     case 'toggle-avista': CTX.soAvista=!CTX.soAvista; el.querySelector('.sw').classList.toggle('on',CTX.soAvista); return;
     case 'salvar-cliente': return salvarCliente();
     /* config */
-    case 'salvar-cfg': { if(bloqueado()) return; const c=cfg(); try{ await D.salvarConfig({...(S.config||{}), pix:$('cfg-pix').value.trim(), reaisPorMes:num($('cfg-rpm').value)||100, bancos:c.bancos}); toast('Salvo.'); }catch(err){ falhou(err); } return; }
+    case 'salvar-cfg': { if(bloqueado()) return; const c=cfg(); try{ await D.salvarConfig({...(S.config||{}), nomeLoja:$('cfg-nome').value.trim(), pix:$('cfg-pix').value.trim(), reaisPorMes:num($('cfg-rpm').value)||100, bancos:c.bancos}); toast('Salvo.'); }catch(err){ falhou(err); } return; }
     case 'add-banco': { if(bloqueado()) return; const v=$('cfg-banco').value.trim(); if(!v) return; const c=cfg(); if(c.bancos.includes(v)) return toast('Esse banco já está na lista.'); try{ await D.salvarConfig({...(S.config||{}), bancos:[...c.bancos,v]}); }catch(err){ falhou(err); } return; }
     case 'rm-banco': { if(bloqueado()) return; const c=cfg(); const b=c.bancos.filter((_,i)=>i!==+id); if(!b.length) return toast('Deixe pelo menos um banco.'); try{ await D.salvarConfig({...(S.config||{}), bancos:b}); }catch(err){ falhou(err); } return; }
     case 'salvar-tpl': { if(bloqueado()) return; try{ await D.salvarConfig({...(S.config||{}), bancos:cfg().bancos, tpl:{lembrete:$('tpl-lembrete').value, atrasada:$('tpl-atrasada').value, firme:$('tpl-firme').value}}); toast('Mensagens salvas.'); }catch(err){ falhou(err); } return; }
@@ -806,7 +1000,11 @@ document.addEventListener('click', async e=>{
     case 'exp-pag': case 'exp-ven': { const txt=exportar(a==='exp-pag'?'pag':'ven',$('exp-mes').value); const ok=await copiar(txt); const o=$('exp-out'); o.value=txt; o.classList.remove('hidden'); if(!ok){ o.focus(); o.select(); toast('Selecione o texto e copie.'); } return; }
   }
 });
-document.addEventListener('click', e=>{ if(e.target.closest('#wa-go')) registrarCobranca(); });
+document.addEventListener('click', e=>{
+  if(e.target.closest('#wa-go')) registrarCobranca();
+  if(e.target.closest('#e-wa') && CTX && CTX.kind==='envio') registrarContato(CTX.clienteId, CTX.fone, false);
+  if(e.target.closest('#f-wa') && CTX && CTX.kind==='fila'){ registrarContato(CTX.ids[CTX.i], CTX.fone, true); CTX.esperando=true; }
+});
 
 document.addEventListener('input', e=>{
   const el=e.target;
@@ -818,7 +1016,9 @@ document.addEventListener('input', e=>{
   if(el.dataset.pc){ CTX.parcelas[+el.dataset.i][el.dataset.pc]=el.value; CTX.editado=true; $('v-soma').innerHTML=somaHTML(); return; }
   if(el.id==='r-valor'){ CTX.valor=el.value; $('r-depois').innerHTML=depoisHTML(); return; }
   if(el.id==='c-msg'){ CTX.msg=el.value; const a=$('wa-go'); if(a) a.href=waLink(); return; }
-  if(el.id==='c-fone'){ CTX.fone=el.value; const a=$('wa-go'); if(a) a.href=waLink(); return; }
+  if(el.id==='c-fone'){ CTX.fone=el.value; const a=$('wa-go'); if(a) a.href=waLink(); const rt=$('wa-rot'); if(rt) rt.textContent=rotuloWa(CTX.fone,'Abrir conversa no WhatsApp'); return; }
+  if(el.id==='e-msg'||el.id==='e-fone'){ if(el.id==='e-msg') CTX.msg=el.value; else CTX.fone=el.value; const a=$('e-wa'); if(a) a.href=waPara(CTX.fone,CTX.msg); const rt=$('wa-rot'); if(rt) rt.textContent=rotuloWa(CTX.fone,'Abrir conversa no WhatsApp'); return; }
+  if(el.id==='f-msg'||el.id==='f-fone'){ if(el.id==='f-msg') CTX.msg=el.value; else CTX.fone=el.value; const a=$('f-wa'); if(a) a.href=waPara(CTX.fone,CTX.msg); const rt=$('wa-rot'); if(rt) rt.textContent=rotuloWa(CTX.fone,'Abrir conversa e ir para a próxima'); return; }
 });
 document.addEventListener('change', e=>{
   const el=e.target; if(!CTX) return;
